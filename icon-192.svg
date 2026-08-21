@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
+  <rect width="192" height="192" rx="32" fill="#0C0C09"/>
+  <rect x="16" y="16" width="160" height="160" rx="24" fill="#1A1A14"/>
+  <polyline points="32,120 60,95 88,105 116,60 144,70 160,45" fill="none" stroke="#0D8A3E" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="32" cy="120" r="5" fill="#0D8A3E"/>
+  <circle cx="60" cy="95" r="5" fill="#0D8A3E"/>
+  <circle cx="88" cy="105" r="5" fill="#0D8A3E"/>
+  <circle cx="116" cy="60" r="5" fill="#0D8A3E"/>
+  <circle cx="144" cy="70" r="5" fill="#0D8A3E"/>
+  <circle cx="160" cy="45" r="5" fill="#4ADE80"/>
+  <text x="96" y="150" text-anchor="middle" font-family="system-ui,sans-serif" font-size="28" font-weight="900" fill="#F4F4F1" letter-spacing="-1">₹</text>
+</svg>
