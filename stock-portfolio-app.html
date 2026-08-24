@@ -5,8 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
-<title>NSE Stock Portfolio Tracker</title>
+  <meta http-equiv="Expires" content="0">
+  <meta name="theme-color" content="#0C0C09">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="StockTrack">
+  <link rel="manifest" href="./manifest.json">
+  <title>NSE Stock Portfolio Tracker</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Inconsolata:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -739,7 +744,8 @@
 
   var state = getState();
 
-  if (!state.holdings || state.holdings.length === 0) {
+  if (typeof state.seeded === "undefined" || state.seeded === false) {
+    if (!state.holdings || state.holdings.length === 0) {
     state.holdings = [
       { ticker:"RELIANCE", broker:"Zerodha", shares:10, avgPrice:2450.75, currentPrice:2870.50, lastUpdate:"2026-08-20" },
       { ticker:"TCS", broker:"Groww", shares:5, avgPrice:3800.00, currentPrice:4125.60, lastUpdate:"2026-08-20" },
@@ -759,6 +765,8 @@
       { type:"BUY", ticker:"TATAMOTORS", broker:"Groww", shares:12, price:780.50, date:"2026-08-09" }
     ];
     state.usedBrokers = ["Zerodha","Groww","Upstox"];
+    }
+    state.seeded = true;
     saveState(state);
   }
 
@@ -1094,9 +1102,15 @@
       list.innerHTML = html;
       list.style.display = "block";
     }
-  }
+   }
 
-  window._app = {};
+   window._app = {};
+
+   window._app.renderAll = function() {
+     renderPortfolio();
+     renderHistory();
+     renderSettings();
+   };
 
   window._app.switchTab = function(name) {
     var tabs = ["portfolio","calculator","add","history","settings"];
@@ -1181,20 +1195,30 @@
 
     var totalShares = Math.floor(investment / entryPrice);
     var actualInvestment = totalShares * entryPrice;
-    var avgPrice = entryPrice;
 
     if (totalShares === 0) { showToast("Investment too small for even 1 share at this price", "error"); return; }
 
     var remainder = investment - actualInvestment;
     var resEl = document.getElementById("calc-results");
+
+    var current = getHoldingSummary(ticker);
+    var hasExisting = current.shares > 0;
+    var combinedShares = current.shares + totalShares;
+    var combinedCost = current.totalCost + actualInvestment;
+    var combinedAvg = hasExisting ? (combinedCost / combinedShares) : entryPrice;
+    var avgPrice = combinedAvg;
+
     var html = '';
 
     html += '<div class="result-card">';
     html += '<div class="result-row"><span class="result-label">Ticker</span><span class="result-value" style="font-size:16px;font-weight:800;">' + escHtml(ticker) + '</span></div>';
     html += '<div class="result-row"><span class="result-label">You Can Buy</span><span class="result-value" style="font-size:20px;">' + totalShares + ' shares</span></div>';
     html += '<div class="result-row"><span class="result-label">Entry Price</span><span class="result-value">' + fmt(entryPrice) + '</span></div>';
-    html += '<div class="result-row"><span class="result-label">Total Investment</span><span class="result-value">' + fmt(actualInvestment) + '</span></div>';
-    html += '<div class="result-row"><span class="result-label">Average Price</span><span class="result-value result-highlight">' + fmt(avgPrice) + '</span></div>';
+    html += '<div class="result-row"><span class="result-label">Investment Used</span><span class="result-value">' + fmt(actualInvestment) + '</span></div>';
+    if (hasExisting) {
+      html += '<div class="result-row"><span class="result-label">Current Holding</span><span class="result-value" style="font-size:13px;opacity:0.85;">' + current.shares + ' @ ' + fmt(current.avgPrice) + '</span></div>';
+    }
+    html += '<div class="result-row"><span class="result-label">' + (hasExisting ? 'New Average Price' : 'Average Price') + '</span><span class="result-value result-highlight">' + fmt(avgPrice) + '</span></div>';
     if (remainder > 0.01) {
       html += '<div class="result-row"><span class="result-label">Balance Left</span><span class="result-value" style="font-size:13px;opacity:0.7;">' + fmt(remainder) + '</span></div>';
     }
@@ -1203,11 +1227,7 @@
     html += '</div>';
     html += '</div>';
 
-    var current = getHoldingSummary(ticker);
-    if (current.shares > 0) {
-      var combinedShares = current.shares + totalShares;
-      var combinedCost = current.totalCost + actualInvestment;
-      var combinedAvg = combinedCost / combinedShares;
+    if (hasExisting) {
       var avgChange = ((combinedAvg - current.avgPrice) / current.avgPrice * 100);
 
       html += '<div class="projected-card">';
@@ -1229,18 +1249,43 @@
     resEl.innerHTML = html;
   };
 
-  window._app.calcAddToPortfolio = function(ticker, shares, price) {
-    window._app.switchTab('add');
-    setTimeout(function() {
-      var t = document.getElementById("add-ticker");
-      var s = document.getElementById("add-shares");
-      var p = document.getElementById("add-price");
-      if (t) t.value = ticker;
-      if (s) s.value = shares;
-      if (p) p.value = price;
-      showToast(ticker + " pre-filled — choose broker & save", "info");
-    }, 100);
-  };
+   window._app.calcAddToPortfolio = function(ticker, shares, price) {
+     var broker = "Zerodha";
+     var existing = getHoldingByTickerBroker(ticker, broker);
+     if (!existing) {
+       for (var i = 0; i < state.holdings.length; i++) {
+         if (state.holdings[i].ticker === ticker) { broker = state.holdings[i].broker; existing = state.holdings[i]; break; }
+       }
+     }
+
+     state.transactions.push({
+       type: "BUY", ticker: ticker, broker: broker,
+       shares: shares, price: price, date: new Date().toISOString().slice(0,10)
+     });
+
+     if (existing) {
+       var oldInv = existing.shares * existing.avgPrice;
+       var newInv = shares * price;
+       existing.shares += shares;
+       existing.avgPrice = (oldInv + newInv) / existing.shares;
+       existing.lastUpdate = new Date().toISOString().slice(0,10);
+       showToast(ticker + " (" + broker + ") updated! New avg: " + fmt(existing.avgPrice), "success");
+     } else {
+       state.holdings.push({
+         ticker: ticker, broker: broker, shares: shares,
+         avgPrice: price, currentPrice: price,
+         lastUpdate: new Date().toISOString().slice(0,10)
+       });
+       showToast(ticker + " (" + broker + ") added!", "success");
+     }
+
+     if (state.usedBrokers.indexOf(broker) === -1) {
+       state.usedBrokers.push(broker);
+     }
+
+     saveState(state);
+     window._app.renderAll();
+   };
 
   window._app.addTickerSearch = function() {
     var input = document.getElementById("add-ticker");
@@ -1649,6 +1694,14 @@
 
   renderPortfolio();
 })();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("./sw.js").catch(function(){});
+  }
+  window.addEventListener("beforeinstallprompt", function(e) {
+    e.preventDefault();
+    window._deferredPrompt = e;
+  });
 </script>
 </body>
 </html>
